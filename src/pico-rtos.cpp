@@ -6,11 +6,8 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "pico/stdlib.h"
-
 #include "tusb.h"
 #include "queue.h"
-
-using namespace std;
 
 #define BULK_IN_EP  0x81 // Pico to Host (IN)
 #define BULK_OUT_EP 0x02 // Host to Pico (OUT)
@@ -27,9 +24,12 @@ void usb_receive_task(void *pvParameters) {
             // Read data from host
             uint32_t count = tud_vendor_read(buffer, sizeof(buffer));
             if (count > 0) {
-                // Process the received data in `buffer`
-                // For example, send it to another queue for further processing
-                // xQueueSendToBack(...);
+                // Print received data as ASCII
+                printf("Received data from host: ");
+                for (uint32_t i = 0; i < count; i++) {
+                    putchar(buffer[i]);
+                }
+                putchar('\n');
             }
         }
         vTaskDelay(pdMS_TO_TICKS(10)); // Delay to prevent tight loop
@@ -39,49 +39,46 @@ void usb_receive_task(void *pvParameters) {
 // FreeRTOS task for sending data to the USB host
 void usb_send_task(void *pvParameters) {
     uint8_t buffer[BULK_EP_SIZE];
+    const char *message = "Hello from Pico!";
 
     while (true) {
         if (tud_vendor_write_available()) {
-            // Check if there’s data to send from the queue
-            if (xQueueReceive(sendQueue, buffer, pdMS_TO_TICKS(10)) == pdPASS) {
+            // Copy message to buffer
+            snprintf((char*)buffer, BULK_EP_SIZE, "%s", message);
+
+            // Send buffer to the queue
+            if (xQueueSendToBack(sendQueue, buffer, pdMS_TO_TICKS(10)) == pdPASS) {
+                // Send data from the queue
                 tud_vendor_write(buffer, sizeof(buffer));
                 tud_vendor_write_flush();
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(10)); // Delay to prevent tight loop
+        vTaskDelay(pdMS_TO_TICKS(1000)); // Send every second
     }
 }
 
-
+// Task to handle LED blinking
 void led_task(void *pvParameters) {
-    // Configure LED pin for output
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 
     while (true) {
         gpio_put(PICO_DEFAULT_LED_PIN, 1);
         vTaskDelay(pdMS_TO_TICKS(100));
-
         gpio_put(PICO_DEFAULT_LED_PIN, 0);
         vTaskDelay(pdMS_TO_TICKS(800));
     }
 }
 
-
-
-
 void setup() {
-    // Add any setup code here, if needed
+    // Any setup code here, if needed
 }
 
 int main() {
     stdio_init_all(); // Initialize standard I/O
+    tusb_init(); // TinyUSB initialization
 
     setup();
-
-
-    stdio_init_all();
-    tusb_init();
 
     // Create FreeRTOS queue
     sendQueue = xQueueCreate(10, BULK_EP_SIZE);
@@ -91,13 +88,14 @@ int main() {
     xTaskCreate(usb_send_task, "USB Send Task", 1024, NULL, 2, NULL);
 
     // Create LED task
-    if (xTaskCreate(led_task, "led_task", 256, NULL, 1, NULL) != pdPASS) {
+    if (xTaskCreate(led_task, "LED Task", 256, NULL, 1, NULL) != pdPASS) {
         printf("Failed to create LED task\n");
         while (1); // Halt if task creation failed
     }
 
     // Start FreeRTOS scheduler
     vTaskStartScheduler();
+
     // Should never reach here
     printf("Scheduler failed to start\n");
     while (1);
