@@ -10,10 +10,15 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 )
 
+# setup NanoPB
+find_package(Nanopb REQUIRED)
+nanopb_generate_cpp(TARGET proto telemetry.proto)
+
 # Link libraries
 target_link_libraries(${PROJECT_NAME}
         pico_stdlib
         FreeRTOS-Kernel-Heap4
+        proto
 )
 
 pico_set_program_name(${PROJECT_NAME} ${PROJECT_NAME})

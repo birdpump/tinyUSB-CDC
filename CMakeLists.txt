@@ -34,4 +34,6 @@ project(${PROJECT_NAME} C CXX ASM)
 
 pico_sdk_init()
 
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/lib/nanopb/extra)
+
 add_subdirectory(src)
